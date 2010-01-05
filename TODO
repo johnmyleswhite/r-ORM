@@ -1,0 +1,19 @@
+Use "subset(column.metadata, Key == 'PRI')" to get the primary keys. Use
+these when building new find methods and dealing with key names.
+
+Construct proper tests for NULL columns, i.e.:
+if (is.null(x[['name']]) | is.null(x[['password']]))
+{
+  stop('Incomplete User object cannot be stored in DB.')
+  return(NULL)
+}
+
+Typecast all inputs to setter methods.
+
+Consider testing for existing symbols to avoid clobbering methods and functions, i.e.:
+if (! existsMethod(potential.method.name))
+if (! existsFunction(potential.function.name))
+
+Use the SQL default values in the create method.
+
+Sanitize all text before sending it to a SQL database.
