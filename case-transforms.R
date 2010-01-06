@@ -1,4 +1,4 @@
-CapitalizeFirstLetter <- function(word)
+capitalize.first.letter <- function(word)
 {
   individual.characters <- strsplit(word, split = character(0))[[1]]
   return(paste(toupper(individual.characters[1]),
@@ -12,16 +12,16 @@ r.case <- function(word)
   return(tolower(gsub('_', '.', word)))
 }
 
-CamelCase <- function(word)
+camel.case <- function(word)
 {
   return(paste(as.character(lapply(strsplit(word,
                                             '[\\._]',
                                             extended = TRUE)[[1]],
-                                   CapitalizeFirstLetter)),
+                                   capitalize.first.letter)),
                collapse = ''))
 }
 
-CCase <- function(word)
+c.case <- function(word)
 {
   return(tolower(gsub('\\.', '_', word)))
 }

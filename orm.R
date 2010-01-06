@@ -5,27 +5,67 @@ source('inflections.R')
 orm.build.model <- function(model.name, autoeval = TRUE)
 {
 	class.name <- model.name
-  
 	table.name <- pluralize(model.name)
-  
-	column.metadata <- fetch.as.data.frame(paste('SHOW COLUMNS FROM `', table.name, '`', sep = ''))
-  
+	column.metadata <- fetch.as.data.frame(paste('SHOW COLUMNS FROM `',
+	                                             table.name,
+	                                             '`',
+	                                             sep = ''))
 	code <- ''
-	
-	code <- paste(code, orm.build.create.method(class.name, table.name, column.metadata), sep = '\n')
-	code <- paste(code, orm.build.find.method(class.name, table.name, column.metadata), sep = '\n')
-	code <- paste(code, orm.build.store.method(class.name, table.name, column.metadata), sep = '\n')
-	code <- paste(code, orm.build.delete.method(class.name, table.name, column.metadata), sep = '\n')
-	code <- paste(code, orm.build.field.methods(class.name, table.name, column.metadata), sep = '\n')
-	code <- paste(code, orm.build.print.method(class.name, table.name, column.metadata), sep = '\n')
-	
-	# Plainly doesn't work.
+	code <- paste(code,
+	              orm.build.create.method(class.name,
+	                                      table.name,
+	                                      column.metadata),
+	              sep = '\n')
+	code <- paste(code,
+	              orm.build.find.method(class.name,
+	                                    table.name,
+	                                    column.metadata),
+	              sep = '\n')
+	code <- paste(code,
+	              orm.build.store.method(class.name,
+	                                     table.name,
+	                                     column.metadata),
+	              sep = '\n')
+	code <- paste(code,
+	              orm.build.delete.method(class.name,
+	                                      table.name,
+	                                      column.metadata),
+                sep = '\n')
+	code <- paste(code,
+	              orm.build.field.methods(class.name,
+	                                      table.name,
+	                                      column.metadata),
+	              sep = '\n')
+	code <- paste(code,
+	              orm.build.print.method(class.name,
+	                                     table.name,
+	                                     column.metadata),
+	              sep = '\n')
 	if (autoeval)
 	{
-		eval(parse(text = code))
+		eval(parse(text = code), envir = sys.frame(sys.parent()))
 	}
-	
 	return(code)
+}
+
+orm.default.escape <- function(value)
+{
+  if (is.na(value))
+  {
+    return('NULL')
+  }
+
+  if (is.character(value))
+  {
+    return(paste('\'',
+                 value,
+                 '\'',
+                 sep = ''))
+  }
+  else
+  {
+    return(value)
+  }
 }
 
 orm.build.create.method <- function(class.name, table.name, column.metadata)
@@ -51,7 +91,8 @@ orm.build.create.method <- function(class.name, table.name, column.metadata)
 	                          function (r)
 	                          {
 	                            paste(as.character(r['Field']),
-	                                  ' = NULL',
+	                                  ' = ',
+	                                  orm.default.escape(r['Default']),
 	                                  sep = '')
 	                          }),
 	                    collapse = ',\n\t\t'),
@@ -98,9 +139,9 @@ orm.build.find.method <- function(class.name, table.name, column.metadata)
 	code <- paste(code,
 	              '\t\tfind.sql <- paste(\'SELECT * FROM `',
 	              table.name,
-	              '` WHERE ',
-	              class.name,
-	              '_id = ',
+	              '` WHERE `',
+	              with(subset(column.metadata, Key == 'PRI'), Field),
+	              '` = ',
 	              '\', x , sep = \'\')\n',
 	              sep = '')
 	code <- paste(code,
@@ -185,8 +226,8 @@ orm.build.store.method <- function(class.name, table.name, column.metadata)
 	              sep = '')
 	code <- paste(code,
 	              '\tif (is.null(x[[\'',
-	              class.name,
-	              '_id\']]))\n',
+	              with(subset(column.metadata, Key == 'PRI'), Field),
+	              '\']]))\n',
 	              sep = '')
 	code <- paste(code,
 	              '\t{\n',
@@ -226,14 +267,34 @@ orm.build.store.method <- function(class.name, table.name, column.metadata)
   code <- paste(code,
                 ', \')\', sep = \'\')\n',
                 sep = '')
-	code <- paste(code, '\t\trun.sql(sql)\n', sep = '')
-	code <- paste(code, '\t\tsql <- \'SELECT LAST_INSERT_ID()\'\n', sep = '')
-	code <- paste(code, '\t\t', r.case(class.name), '.id(x) <- fetch.as.list(sql)[[1]][[1]]\n', sep = '')
-	code <- paste(code, '\t\treturn(x)\n')
-	code <- paste(code, '\t}\n')
-	code <- paste(code, '\telse\n', sep = '')
-	code <- paste(code, '\t{\n', sep = '')
-	code <- paste(code, '\t\tsql <- paste(\'UPDATE `', table.name, '` SET ', sep = '')
+	code <- paste(code,
+	              '\t\trun.sql(sql)\n',
+	              sep = '')
+	code <- paste(code,
+	              '\t\tsql <- \'SELECT LAST_INSERT_ID()\'\n',
+	              sep = '')
+	code <- paste(code,
+	              '\t\t',
+	              r.case(with(subset(column.metadata, Key == 'PRI'), Field)),
+	              '(x) <- fetch.as.list(sql)[[1]][[1]]\n',
+	              sep = '')
+	code <- paste(code,
+	              '\t\treturn(x)\n',
+	              sep = '')
+	code <- paste(code,
+	              '\t}\n',
+	              sep = '')
+	code <- paste(code,
+	              '\telse\n',
+	              sep = '')
+	code <- paste(code,
+	              '\t{\n',
+	              sep = '')
+	code <- paste(code,
+	              '\t\tsql <- paste(\'UPDATE `',
+	              table.name,
+	              '` SET ',
+	              sep = '')
 	code <- paste(code,
                 paste(apply(column.metadata,
                             1,
@@ -250,11 +311,25 @@ orm.build.store.method <- function(class.name, table.name, column.metadata)
                       collapse = ', \', '),
                 ', \' ',
                 sep = '')
-	code <- paste(code, 'WHERE `', class.name, '_id` = \', x[[\'', class.name, '_id\']], sep = \'\')\n', sep = '')
-  code <- paste(code, '\t\trun.sql(sql)\n', sep = '')
-  code <- paste(code, '\t\treturn(x)\n', sep = '')
-  code <- paste(code, '\t}\n', sep = '')
-  code <- paste(code, '}\n', sep = '')
+	code <- paste(code,
+	              'WHERE `',
+	              with(subset(column.metadata, Key == 'PRI'), Field),
+	              '` = \', x[[\'',
+	              with(subset(column.metadata, Key == 'PRI'), Field),
+	              '\']], sep = \'\')\n',
+	              sep = '')
+  code <- paste(code,
+                '\t\trun.sql(sql)\n',
+                sep = '')
+  code <- paste(code,
+                '\t\treturn(x)\n',
+                sep = '')
+  code <- paste(code,
+                '\t}\n',
+                sep = '')
+  code <- paste(code,
+                '}\n',
+                sep = '')
 	return(code)
 }
 
@@ -284,12 +359,12 @@ orm.build.delete.method <- function(class.name, table.name, column.metadata)
 	code <- paste(code,
 	              '\tsql <- paste(\'DELETE FROM `',
 	              table.name,
-	              '` WHERE ',
-	              class.name,
-	              '_id = \', ',
+	              '` WHERE `',
+	              with(subset(column.metadata, Key == 'PRI'), Field),
+	              '` = \', ',
 	              'x[[\'',
-	              class.name,
-	              '_id', '\']], sep = \'\')\n',
+	              with(subset(column.metadata, Key == 'PRI'), Field),
+	              '\']], sep = \'\')\n',
 	              sep = '')
 	code <- paste(code,
 	              '\trun.sql(sql)\n',
